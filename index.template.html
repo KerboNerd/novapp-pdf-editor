@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PDF Editor</title>
+    <style>
+<!-- STYLES -->
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <header class="bar">
+        <p class="mark">PDF</p>
+        <button type="button" id="open">Open</button>
+        <button type="button" id="save">Save</button>
+        <button type="button" id="save-as">Save As</button>
+        <button type="button" id="undo">Undo</button>
+        <button type="button" id="redo">Redo</button>
+      </header>
+      <div class="stage">
+        <nav class="pages" id="pages"></nav>
+        <div class="well">
+          <div id="page"><canvas id="page-canvas"></canvas><div id="overlay"></div></div>
+        </div>
+        <aside class="side">
+          <div class="tools">
+            <button type="button" data-tool="select">Select</button>
+            <button type="button" data-tool="text">Text</button>
+            <button type="button" data-tool="rect">Rect</button>
+            <button type="button" data-tool="ellipse">Ellipse</button>
+            <button type="button" data-tool="line">Line</button>
+            <button type="button" data-tool="highlight">Highlight</button>
+            <button type="button" data-tool="note">Note</button>
+            <button type="button" data-tool="field-text">Field</button>
+            <button type="button" data-tool="field-check">Check</button>
+            <button type="button" data-tool="field-dropdown">List</button>
+          </div>
+          <div class="ai">
+            <label for="scope">Scope</label>
+            <select id="scope">
+              <option value="selection">Selection</option>
+              <option value="page">Page</option>
+              <option value="document">Document</option>
+            </select>
+            <label for="instruction">Ask</label>
+            <textarea id="instruction"></textarea>
+            <button type="button" id="ask">Apply</button>
+            <label for="image-url">Image URL</label>
+            <input id="image-url" type="url" />
+            <button type="button" id="place-url">Place URL</button>
+          </div>
+        </aside>
+      </div>
+      <p id="status">Ready</p>
+    </div>
+    <script>
+<!-- BUNDLE -->
+    </script>
+  </body>
+</html>

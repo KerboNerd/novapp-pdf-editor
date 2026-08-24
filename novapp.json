@@ -1,0 +1,7 @@
+{
+  "id": "pdf-editor",
+  "name": "PDF Editor",
+  "version": "0.1.0",
+  "entry": "index.html",
+  "permissions": [{ "id": "models" }, { "id": "fs" }, { "id": "network" }]
+}
