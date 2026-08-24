@@ -1,16 +1,19 @@
-const N = globalThis.NovaPdf;
-const novaCall = N.createNovaCall({
-  post: (msg) => parent.postMessage(msg, "*"),
-  subscribe: (fn) => {
-    const on = (event) => {
-      if (event.source === parent) fn(event.data);
-    };
-    window.addEventListener("message", on);
-    return () => window.removeEventListener("message", on);
-  },
-});
+const N = globalThis.NovaPdf || {};
+const novaCall = N.createNovaCall
+  ? N.createNovaCall({
+      post: (msg) => parent.postMessage(msg, "*"),
+      subscribe: (fn) => {
+        const on = (event) => {
+          if (event.source && event.source !== parent) return;
+          fn(event.data);
+        };
+        window.addEventListener("message", on);
+        return () => window.removeEventListener("message", on);
+      },
+    })
+  : () => Promise.reject(new Error("App failed to load"));
 
-const session = N.createSession();
+const session = N.createSession ? N.createSession() : { doc: { dirty: false }, history: { past: [], future: [] }, page: 0 };
 const ui = {
   app: document.getElementById("app"),
   open: document.getElementById("open"),
@@ -162,7 +165,7 @@ async function persistRecents(path, name) {
 async function openAt(path, name) {
   setStatus("Opening");
   const read = await novaCall("fs.read", { path, encoding: "base64" });
-  const bytes = N.base64ToBytes ? N.base64ToBytes(read.bytesBase64) : undefined;
+  const bytes = N.bytesFromRead ? N.bytesFromRead(read) : N.base64ToBytes(read.bytesBase64);
   let info = N.sniffPdf
     ? N.sniffPdf(bytes ?? new Uint8Array())
     : { pages: [{ w: 612, h: 792 }], objects: [], unlifted: [{ page: 0, reason: "page-render" }] };
@@ -184,8 +187,12 @@ async function openAt(path, name) {
 }
 
 async function pickOpen() {
-  const file = await novaCall("fs.pick", {});
-  if (!file) return;
+  setStatus("Open");
+  const file = N.asPickedFile ? N.asPickedFile(await novaCall("fs.pick", {})) : await novaCall("fs.pick", {});
+  if (!file) {
+    setStatus("No file selected");
+    return;
+  }
   await openAt(file.path, file.name);
 }
 
@@ -226,8 +233,8 @@ async function placeImage(bytesBase64, mime) {
   setStatus("Image placed");
 }
 
-ui.open.addEventListener("click", () => void pickOpen().catch((err) => setStatus(explain(err), "cut")));
-ui.openVoid.addEventListener("click", () => void pickOpen().catch((err) => setStatus(explain(err), "cut")));
+ui.open?.addEventListener("click", () => void pickOpen().catch((err) => setStatus(explain(err), "cut")));
+ui.openVoid?.addEventListener("click", () => void pickOpen().catch((err) => setStatus(explain(err), "cut")));
 
 ui.save.addEventListener("click", () => {
   void (async () => {
