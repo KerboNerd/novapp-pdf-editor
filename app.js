@@ -12,7 +12,9 @@ const novaCall = N.createNovaCall({
 
 const session = N.createSession();
 const ui = {
+  app: document.getElementById("app"),
   open: document.getElementById("open"),
+  openVoid: document.getElementById("open-void"),
   save: document.getElementById("save"),
   saveAs: document.getElementById("save-as"),
   undo: document.getElementById("undo"),
@@ -23,13 +25,16 @@ const ui = {
   canvas: document.getElementById("page-canvas"),
   status: document.getElementById("status"),
   instruction: document.getElementById("instruction"),
-  scope: document.getElementById("scope"),
   ask: document.getElementById("ask"),
   imageUrl: document.getElementById("image-url"),
+  recents: document.getElementById("recents"),
+  folio: document.getElementById("folio"),
+  docName: document.getElementById("doc-name"),
 };
 
 let selectedId = null;
 let tool = "select";
+let scope = "page";
 let recents = [];
 
 function setStatus(text, kind) {
@@ -41,10 +46,52 @@ function explain(err) {
   return err instanceof Error ? err.message : String(err);
 }
 
+function setTool(next) {
+  tool = next;
+  document.querySelectorAll("[data-tool]").forEach((btn) => {
+    btn.classList.toggle("on", btn.getAttribute("data-tool") === tool);
+  });
+}
+
+function sizePage() {
+  const size = session.doc.pages?.[session.page];
+  if (!size || !ui.page) return;
+  ui.page.style.width = `${size.w}px`;
+  ui.page.style.height = `${size.h}px`;
+}
+
+function renderChrome() {
+  const has = Boolean(session.doc.bytes);
+  ui.app.classList.toggle("has-doc", has);
+  ui.app.classList.toggle("is-dirty", Boolean(session.doc.dirty));
+  ui.save.disabled = !has;
+  ui.saveAs.disabled = !has;
+  const total = session.doc.pages?.length ?? 0;
+  ui.folio.textContent = has && total ? `${session.page + 1} / ${total}` : "";
+  ui.docName.textContent = has ? session.doc.name || "Untitled" : "No file";
+}
+
+function renderRecents() {
+  if (!ui.recents) return;
+  ui.recents.replaceChildren();
+  for (const item of recents) {
+    const row = document.createElement("li");
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = item.name || item.path;
+    btn.addEventListener("click", () => {
+      void openAt(item.path, item.name).catch((err) => setStatus(explain(err), "cut"));
+    });
+    row.append(btn);
+    ui.recents.append(row);
+  }
+}
+
 function renderPages() {
   ui.pages.replaceChildren();
   (session.doc.pages ?? []).forEach((_, i) => {
     const btn = document.createElement("button");
+    btn.type = "button";
     btn.className = `page-btn${i === session.page ? " on" : ""}`;
     btn.textContent = String(i + 1);
     btn.addEventListener("click", () => {
@@ -60,16 +107,19 @@ function renderOverlay() {
   for (const obj of session.doc.objects ?? []) {
     if (obj.page !== session.page) continue;
     const el = document.createElement("div");
+    const lifted = Boolean(obj.payload?.lifted);
     el.className = `obj${obj.id === selectedId ? " sel" : ""}`;
+    el.classList.toggle("lifted", lifted);
+    if (obj.kind === "annotation" && obj.payload?.kind) el.classList.add(obj.payload.kind);
+    if (obj.kind === "field") el.classList.add("field");
     el.style.left = `${obj.bbox.x}px`;
     el.style.top = `${obj.bbox.y}px`;
     el.style.width = `${obj.bbox.w}px`;
     el.style.height = `${obj.bbox.h}px`;
-    const lifted = Boolean(obj.payload?.lifted);
-    el.classList.toggle("lifted", lifted);
     el.textContent = obj.kind === "text" && (!lifted || obj.id === selectedId) ? String(obj.payload?.text ?? "") : "";
     el.addEventListener("mousedown", (event) => {
       if (tool !== "select") return;
+      event.stopPropagation();
       selectedId = obj.id;
       const start = { x: event.clientX, y: event.clientY, bx: obj.bbox.x, by: obj.bbox.y };
       session.history = N.pushHistory(session.history, session.doc);
@@ -78,6 +128,7 @@ function renderOverlay() {
         obj.bbox.y = start.by + (ev.clientY - start.y);
         session.doc.dirty = true;
         renderOverlay();
+        renderChrome();
       }
       function up() {
         window.removeEventListener("mousemove", move);
@@ -93,9 +144,10 @@ function renderOverlay() {
 }
 
 function render() {
-  ui.save.disabled = !session.doc.path && !session.doc.bytes;
+  renderChrome();
   renderPages();
   renderOverlay();
+  sizePage();
   if (session.pdf && ui.canvas && N.renderPageToCanvas) {
     void N.renderPageToCanvas(session.pdf, session.page, ui.canvas, window.devicePixelRatio || 1).catch(() => {});
   }
@@ -104,12 +156,16 @@ function render() {
 async function persistRecents(path, name) {
   recents = N.rememberRecent(recents, { path, name, at: new Date().toISOString() });
   await novaCall("storage.set", { key: "recents", value: recents });
+  renderRecents();
 }
 
 async function openAt(path, name) {
+  setStatus("Opening");
   const read = await novaCall("fs.read", { path, encoding: "base64" });
   const bytes = N.base64ToBytes ? N.base64ToBytes(read.bytesBase64) : undefined;
-  let info = N.sniffPdf ? N.sniffPdf(bytes ?? new Uint8Array()) : { pages: [{ w: 612, h: 792 }], objects: [], unlifted: [{ page: 0, reason: "page-render" }] };
+  let info = N.sniffPdf
+    ? N.sniffPdf(bytes ?? new Uint8Array())
+    : { pages: [{ w: 612, h: 792 }], objects: [], unlifted: [{ page: 0, reason: "page-render" }] };
   session.pdf = null;
   if (N.loadPdf && bytes) {
     try {
@@ -122,55 +178,74 @@ async function openAt(path, name) {
   }
   N.openDocument(session, { path, name, bytes, pages: info.pages, objects: info.objects, unlifted: info.unlifted });
   selectedId = null;
-  ui.page.style.width = `${info.pages[0]?.w ?? 612}px`;
-  ui.page.style.height = `${info.pages[0]?.h ?? 792}px`;
   await persistRecents(path, name);
   setStatus(session.pdf ? "Opened" : "Opened. Page paint not lifted.");
   render();
 }
 
+async function pickOpen() {
+  const file = await novaCall("fs.pick", {});
+  if (!file) return;
+  await openAt(file.path, file.name);
+}
+
 async function writeCurrent(path) {
   if (!session.doc.bytes) throw new Error("Nothing to save");
+  setStatus("Saving");
   const out = N.writePdf ? await N.writePdf(session.doc.bytes, session.doc) : session.doc.bytes;
   const bytesBase64 = N.bytesToBase64 ? N.bytesToBase64(out) : btoa(String.fromCharCode(...out));
   await novaCall("fs.write", { path, bytesBase64 });
   session.doc.path = path;
+  session.doc.name = path.split(/[/\\]/).pop() ?? session.doc.name;
   session.doc.dirty = false;
   setStatus("Saved");
   render();
 }
 
-ui.open.addEventListener("click", async () => {
-  try {
-    const file = await novaCall("fs.pick", {});
-    if (!file) return;
-    await openAt(file.path, file.name);
-  } catch (err) {
-    setStatus(explain(err), "cut");
-  }
-});
+async function placeImage(bytesBase64, mime) {
+  const id = N.newId ? N.newId() : crypto.randomUUID();
+  session.history = N.pushHistory(session.history, session.doc);
+  const applied = N.applyEditList(session.doc, {
+    version: 1,
+    ops: [
+      {
+        op: "add",
+        object: {
+          id,
+          page: session.page,
+          kind: "image",
+          bbox: { x: 40, y: 40, w: 160, h: 120 },
+          z: (session.doc.objects?.length ?? 0) + 1,
+          payload: { bytesBase64, mime },
+        },
+      },
+    ],
+  });
+  if (applied.ok) session.doc = applied.doc;
+  render();
+  setStatus("Image placed");
+}
 
-ui.save.addEventListener("click", async () => {
-  try {
+ui.open.addEventListener("click", () => void pickOpen().catch((err) => setStatus(explain(err), "cut")));
+ui.openVoid.addEventListener("click", () => void pickOpen().catch((err) => setStatus(explain(err), "cut")));
+
+ui.save.addEventListener("click", () => {
+  void (async () => {
     if (!session.doc.path) {
       ui.saveAs.click();
       return;
     }
     await writeCurrent(session.doc.path);
-  } catch (err) {
-    setStatus(explain(err), "cut");
-  }
+  })().catch((err) => setStatus(explain(err), "cut"));
 });
 
-ui.saveAs.addEventListener("click", async () => {
-  try {
+ui.saveAs.addEventListener("click", () => {
+  void (async () => {
     const file = await novaCall("fs.pickSave", { defaultName: session.doc.name || "document.pdf", accept: ".pdf" });
     if (!file) return;
     await writeCurrent(file.path);
     await persistRecents(file.path, file.name);
-  } catch (err) {
-    setStatus(explain(err), "cut");
-  }
+  })().catch((err) => setStatus(explain(err), "cut"));
 });
 
 ui.undo.addEventListener("click", () => {
@@ -189,8 +264,17 @@ ui.redo.addEventListener("click", () => {
 
 document.querySelectorAll("[data-tool]").forEach((btn) => {
   btn.addEventListener("click", () => {
-    tool = btn.getAttribute("data-tool");
-    setStatus(tool);
+    setTool(btn.getAttribute("data-tool"));
+    setStatus(tool === "select" ? "Select" : `Place ${btn.textContent}`);
+  });
+});
+
+document.querySelectorAll("[data-scope]").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    scope = btn.getAttribute("data-scope");
+    document.querySelectorAll("[data-scope]").forEach((item) => {
+      item.classList.toggle("on", item === btn);
+    });
   });
 });
 
@@ -238,7 +322,7 @@ ui.ask.addEventListener("click", async () => {
   try {
     const prompt = N.buildCompletePrompt({
       instruction,
-      scope: ui.scope.value,
+      scope,
       doc: session.doc,
       page: session.page,
       selectedIds: selectedId ? [selectedId] : [],
@@ -273,37 +357,51 @@ document.getElementById("place-url")?.addEventListener("click", async () => {
   if (!url) return;
   try {
     const res = await novaCall("network.fetch", { url, encoding: "base64" });
-    const id = N.newId ? N.newId() : crypto.randomUUID();
-    session.history = N.pushHistory(session.history, session.doc);
-    const applied = N.applyEditList(session.doc, {
-      version: 1,
-      ops: [
-        {
-          op: "add",
-          object: {
-            id,
-            page: session.page,
-            kind: "image",
-            bbox: { x: 40, y: 40, w: 160, h: 120 },
-            z: (session.doc.objects?.length ?? 0) + 1,
-            payload: { bytesBase64: res.bodyBase64, mime: "image" },
-          },
-        },
-      ],
-    });
-    if (applied.ok) session.doc = applied.doc;
-    render();
-    setStatus("Image placed");
+    await placeImage(res.bodyBase64, "image");
   } catch (err) {
     setStatus(explain(err), "cut");
+  }
+});
+
+document.getElementById("place-file")?.addEventListener("click", async () => {
+  try {
+    const file = await novaCall("fs.pick", {});
+    if (!file) return;
+    const read = await novaCall("fs.read", { path: file.path, encoding: "base64" });
+    const lower = file.name.toLowerCase();
+    await placeImage(read.bytesBase64, lower.endsWith(".jpg") || lower.endsWith(".jpeg") ? "image/jpeg" : "image/png");
+  } catch (err) {
+    setStatus(explain(err), "cut");
+  }
+});
+
+window.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    selectedId = null;
+    setTool("select");
+    renderOverlay();
+  }
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "o") {
+    event.preventDefault();
+    void pickOpen().catch((err) => setStatus(explain(err), "cut"));
+  }
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+    event.preventDefault();
+    ui.save.click();
+  }
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
+    event.preventDefault();
+    ui.undo.click();
   }
 });
 
 novaCall("storage.get", { key: "recents" })
   .then((value) => {
     if (Array.isArray(value)) recents = value;
+    renderRecents();
     setStatus("Ready");
   })
   .catch((err) => setStatus(explain(err), "cut"));
 
+setTool("select");
 render();

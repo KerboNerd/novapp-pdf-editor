@@ -11,48 +11,83 @@
   <body>
     <div id="app">
       <header class="bar">
-        <p class="mark">PDF</p>
-        <button type="button" id="open">Open</button>
-        <button type="button" id="save">Save</button>
-        <button type="button" id="save-as">Save As</button>
-        <button type="button" id="undo">Undo</button>
-        <button type="button" id="redo">Redo</button>
+        <div class="brand">
+          <p class="mark">PDF</p>
+          <div class="ident">
+            <p id="doc-name">No file</p>
+            <p id="status">Ready</p>
+          </div>
+        </div>
+        <div class="acts">
+          <button type="button" id="open">Open</button>
+          <button type="button" id="save">Save</button>
+          <button type="button" id="save-as">Save As</button>
+        </div>
+        <div class="hist">
+          <p id="folio"></p>
+          <button type="button" id="undo">Undo</button>
+          <button type="button" id="redo">Redo</button>
+          <span id="dirty" title="Unsaved"></span>
+        </div>
       </header>
       <div class="stage">
-        <nav class="pages" id="pages"></nav>
+        <nav class="pages" id="pages" aria-label="Pages"></nav>
         <div class="well">
-          <div id="page"><canvas id="page-canvas"></canvas><div id="overlay"></div></div>
+          <div class="void" id="bed-empty">
+            <p class="void-title">Open a PDF</p>
+            <p class="void-copy">Pick a file from disk. Recent files stay here.</p>
+            <button type="button" id="open-void">Open</button>
+            <ul id="recents"></ul>
+          </div>
+          <div id="page">
+            <div class="gripper" aria-hidden="true"></div>
+            <canvas id="page-canvas"></canvas>
+            <div id="overlay"></div>
+          </div>
         </div>
-        <aside class="side">
-          <div class="tools">
-            <button type="button" data-tool="select">Select</button>
-            <button type="button" data-tool="text">Text</button>
-            <button type="button" data-tool="rect">Rect</button>
-            <button type="button" data-tool="ellipse">Ellipse</button>
-            <button type="button" data-tool="line">Line</button>
-            <button type="button" data-tool="highlight">Highlight</button>
-            <button type="button" data-tool="note">Note</button>
-            <button type="button" data-tool="field-text">Field</button>
-            <button type="button" data-tool="field-check">Check</button>
-            <button type="button" data-tool="field-dropdown">List</button>
-          </div>
-          <div class="ai">
-            <label for="scope">Scope</label>
-            <select id="scope">
-              <option value="selection">Selection</option>
-              <option value="page">Page</option>
-              <option value="document">Document</option>
-            </select>
-            <label for="instruction">Ask</label>
-            <textarea id="instruction"></textarea>
-            <button type="button" id="ask">Apply</button>
-            <label for="image-url">Image URL</label>
-            <input id="image-url" type="url" />
-            <button type="button" id="place-url">Place URL</button>
-          </div>
-        </aside>
       </div>
-      <p id="status">Ready</p>
+      <div class="stick" role="toolbar" aria-label="Marks">
+        <div class="case">
+          <p class="case-label">Point</p>
+          <button type="button" data-tool="select" class="on">Select</button>
+        </div>
+        <div class="case">
+          <p class="case-label">Mark</p>
+          <button type="button" data-tool="text">Text</button>
+          <button type="button" data-tool="highlight">Highlight</button>
+          <button type="button" data-tool="note">Note</button>
+        </div>
+        <div class="case">
+          <p class="case-label">Draw</p>
+          <button type="button" data-tool="rect">Rect</button>
+          <button type="button" data-tool="ellipse">Ellipse</button>
+          <button type="button" data-tool="line">Line</button>
+        </div>
+        <div class="case">
+          <p class="case-label">Field</p>
+          <button type="button" data-tool="field-text">Input</button>
+          <button type="button" data-tool="field-check">Check</button>
+          <button type="button" data-tool="field-dropdown">List</button>
+        </div>
+      </div>
+      <div class="galley">
+        <div class="ask">
+          <p class="galley-label">Ask</p>
+          <div class="scopes">
+            <button type="button" data-scope="selection">Selection</button>
+            <button type="button" data-scope="page" class="on">Page</button>
+            <button type="button" data-scope="document">Document</button>
+          </div>
+          <textarea id="instruction" placeholder="Rewrite this heading. Tighten the second paragraph."></textarea>
+          <button type="button" id="ask">Apply</button>
+        </div>
+        <div class="place">
+          <p class="galley-label">Image</p>
+          <input id="image-url" type="url" placeholder="https://" />
+          <button type="button" id="place-url">Place URL</button>
+          <button type="button" id="place-file">Place file</button>
+        </div>
+      </div>
     </div>
     <script>
 <!-- BUNDLE -->
